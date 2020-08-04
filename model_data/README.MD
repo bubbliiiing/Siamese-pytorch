@@ -1,0 +1,4 @@
+这一部分用来存放vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5和Omniglot_vgg.h5。
+其中:
+Omniglot_vgg.h5是Omniglot训练好的权重，可直接使用。
+vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5是vgg的权重，可以用于训练其它的数据集。
