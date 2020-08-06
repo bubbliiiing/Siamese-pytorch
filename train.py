@@ -4,6 +4,7 @@ import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.backends.cudnn as cudnn
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
