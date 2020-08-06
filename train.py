@@ -149,6 +149,8 @@ if __name__ == "__main__":
     
     net = model.train()
     if Cuda:
+        net = torch.nn.DataParallel(model)
+        cudnn.benchmark = True
         net = net.cuda()
 
     loss = nn.BCELoss()
