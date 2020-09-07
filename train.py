@@ -169,7 +169,7 @@ if __name__ == "__main__":
         Freeze_Epoch = 25
         
         optimizer = optim.Adam(net.parameters(),lr,weight_decay=5e-4)
-        lr_scheduler = optim.lr_scheduler.StepLR(optimizer,step_size=1,gamma=0.9)
+        lr_scheduler = optim.lr_scheduler.StepLR(optimizer,step_size=1,gamma=0.95)
 
         if train_own_data:
             train_dataset = SiameseDataset_own_dataset(input_shape, dataset_path, num_train, num_val, train=True)
@@ -202,7 +202,7 @@ if __name__ == "__main__":
         Unfreeze_Epoch = 50
 
         optimizer = optim.Adam(net.parameters(),lr,weight_decay=5e-4)
-        lr_scheduler = optim.lr_scheduler.StepLR(optimizer,step_size=1,gamma=0.9)
+        lr_scheduler = optim.lr_scheduler.StepLR(optimizer,step_size=1,gamma=0.95)
 
         if train_own_data:
             train_dataset = SiameseDataset_own_dataset(input_shape, dataset_path, num_train, num_val, train=True)
