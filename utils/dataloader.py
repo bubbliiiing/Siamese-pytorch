@@ -129,8 +129,6 @@ class SiameseDataset(Dataset):
         return image_data
 
     def _convert_path_list_to_images_and_labels(self, path_list):
-        # 如果batch_size = 16
-        # len(path_list)/ = 32
         number_of_pairs = int(len(path_list) / 2)
         pairs_of_images = [np.zeros((number_of_pairs, self.channel, self.image_height, self.image_width)) for i in range(2)]
         labels = np.zeros((number_of_pairs, 1))
