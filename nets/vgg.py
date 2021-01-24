@@ -39,6 +39,11 @@ class VGG(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
 
+# 105, 105, 3 -> 105, 105, 64 -> 52, 52, 64
+# 52, 52, 64 -> 52, 52, 128 -> 26, 26, 128
+# 26, 26, 128 -> 26, 26, 256 -> 13, 13, 256
+# 13, 13, 256 -> 13, 13, 512 -> 6, 6, 512
+# 6, 6, 512 -> 6, 6, 512 -> 3, 3, 512
 def make_layers(cfg, batch_norm=False, in_channels = 3):
     layers = []
     for v in cfg:
@@ -57,8 +62,6 @@ def make_layers(cfg, batch_norm=False, in_channels = 3):
 cfgs = {
     'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']
 }
-
-
 def VGG16(pretrained, in_channels, **kwargs):
     model = VGG(make_layers(cfgs["D"], batch_norm = False, in_channels = in_channels), **kwargs)
     if pretrained:
