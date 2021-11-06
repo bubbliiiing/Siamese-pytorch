@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision.models.utils import load_state_dict_from_url
 
+
 class VGG(nn.Module):
     def __init__(self, features, num_classes=1000):
         super(VGG, self).__init__()
@@ -38,12 +39,11 @@ class VGG(nn.Module):
                 nn.init.normal_(m.weight, 0, 0.01)
                 nn.init.constant_(m.bias, 0)
 
-
-# 105, 105, 3 -> 105, 105, 64 -> 52, 52, 64
-# 52, 52, 64 -> 52, 52, 128 -> 26, 26, 128
-# 26, 26, 128 -> 26, 26, 256 -> 13, 13, 256
-# 13, 13, 256 -> 13, 13, 512 -> 6, 6, 512
-# 6, 6, 512 -> 6, 6, 512 -> 3, 3, 512
+# 105, 105, 3   -> 105, 105, 64 -> 52, 52, 64
+# 52, 52, 64    -> 52, 52, 128  -> 26, 26, 128
+# 26, 26, 128   -> 26, 26, 256  -> 13, 13, 256
+# 13, 13, 256   -> 13, 13, 512  -> 6, 6, 512
+# 6, 6, 512     -> 6, 6, 512    -> 3, 3, 512
 def make_layers(cfg, batch_norm=False, in_channels = 3):
     layers = []
     for v in cfg:
@@ -57,7 +57,6 @@ def make_layers(cfg, batch_norm=False, in_channels = 3):
                 layers += [conv2d, nn.ReLU(inplace=True)]
             in_channels = v
     return nn.Sequential(*layers)
-
 
 cfgs = {
     'D': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M']

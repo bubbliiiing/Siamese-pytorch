@@ -1,6 +1,7 @@
-from siamese import Siamese
-from PIL import Image
 import numpy as np
+from PIL import Image
+
+from siamese import Siamese
 
 if __name__ == "__main__":
     model = Siamese()

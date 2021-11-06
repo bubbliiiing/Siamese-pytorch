@@ -1,12 +1,8 @@
-import colorsys
-import os
-
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
-from PIL import Image, ImageDraw, ImageFont
-from torch.autograd import Variable
+from PIL import Image
 
 from nets.siamese import Siamese as siamese
 
@@ -16,8 +12,19 @@ from nets.siamese import Siamese as siamese
 #---------------------------------------------------#
 class Siamese(object):
     _defaults = {
+        #-----------------------------------------------------#
+        #   使用自己训练好的模型进行预测一定要修改model_path
+        #   model_path指向logs文件夹下的权值文件
+        #-----------------------------------------------------#
         "model_path"    : 'model_data/Omniglot_vgg.pth',
+        #-----------------------------------------------------#
+        #   输入图片的大小。
+        #-----------------------------------------------------#
         "input_shape"   : (105, 105, 3),
+        #-------------------------------#
+        #   是否使用Cuda
+        #   没有GPU可以设置成False
+        #-------------------------------#
         "cuda"          : True
     }
 
@@ -43,11 +50,11 @@ class Siamese(object):
         #   载入模型与权值
         #---------------------------#
         print('Loading weights into state dict...')
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        model = siamese(self.input_shape)
+        device  = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model   = siamese(self.input_shape)
         model.load_state_dict(torch.load(self.model_path, map_location=device))
         self.net = model.eval()
-        print('{} model, anchors, and classes loaded.'.format(self.model_path))
+        print('{} model loaded.'.format(self.model_path))
 
         if self.cuda:
             self.net = torch.nn.DataParallel(self.net)
@@ -55,15 +62,15 @@ class Siamese(object):
             self.net = self.net.cuda()
     
     def letterbox_image(self, image, size):
-        image = image.convert("RGB")
-        iw, ih = image.size
-        w, h = size
-        scale = min(w/iw, h/ih)
-        nw = int(iw*scale)
-        nh = int(ih*scale)
+        image   = image.convert("RGB")
+        iw, ih  = image.size
+        w, h    = size
+        scale   = min(w/iw, h/ih)
+        nw      = int(iw*scale)
+        nh      = int(ih*scale)
 
-        image = image.resize((nw,nh), Image.BICUBIC)
-        new_image = Image.new('RGB', size, (128,128,128))
+        image       = image.resize((nw,nh), Image.BICUBIC)
+        new_image   = Image.new('RGB', size, (128,128,128))
         new_image.paste(image, ((w-nw)//2, (h-nh)//2))
         if self.input_shape[-1]==1:
             new_image = new_image.convert("L")
@@ -82,28 +89,28 @@ class Siamese(object):
         #---------------------------------------------------#
         #   对输入图像进行归一化
         #---------------------------------------------------#
-        photo_1 = np.asarray(image_1).astype(np.float64)/255
-        photo_2 = np.asarray(image_2).astype(np.float64)/255
+        photo_1 = np.asarray(image_1).astype(np.float64) / 255
+        photo_2 = np.asarray(image_2).astype(np.float64) / 255
 
         if self.input_shape[-1]==1:
-            photo_1 = np.expand_dims(photo_1,-1)
-            photo_2 = np.expand_dims(photo_2,-1)
+            photo_1 = np.expand_dims(photo_1, -1)
+            photo_2 = np.expand_dims(photo_2, -1)
 
         with torch.no_grad():
             #---------------------------------------------------#
             #   添加上batch维度，才可以放入网络中预测
             #---------------------------------------------------#
-            photo_1 = Variable(torch.from_numpy(np.expand_dims(np.transpose(photo_1,(2,0,1)),0)).type(torch.FloatTensor))
-            photo_2 = Variable(torch.from_numpy(np.expand_dims(np.transpose(photo_2,(2,0,1)),0)).type(torch.FloatTensor))
+            photo_1 = torch.from_numpy(np.expand_dims(np.transpose(photo_1, (2, 0, 1)), 0)).type(torch.FloatTensor)
+            photo_2 = torch.from_numpy(np.expand_dims(np.transpose(photo_2, (2, 0, 1)), 0)).type(torch.FloatTensor)
             
-            #---------------------------------------------------#
-            #   获得预测结果，output输出为概率
-            #---------------------------------------------------#
             if self.cuda:
                 photo_1 = photo_1.cuda()
                 photo_2 = photo_2.cuda()
                 
-            output = self.net([photo_1,photo_2])[0]
+            #---------------------------------------------------#
+            #   获得预测结果，output输出为概率
+            #---------------------------------------------------#
+            output = self.net([photo_1, photo_2])[0]
             output = torch.nn.Sigmoid()(output)
 
         plt.subplot(1, 2, 1)
