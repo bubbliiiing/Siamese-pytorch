@@ -123,6 +123,12 @@ if __name__ == "__main__":
         Lr              = 1e-4
         Init_epoch      = 0
         Freeze_epoch    = 50
+
+        epoch_step          = num_train // Batch_size
+        epoch_step_val      = num_val // Batch_size
+
+        if epoch_step == 0 or epoch_step_val == 0:
+            raise ValueError('数据集过小，无法进行训练，请扩充数据集。')
         
         optimizer       = optim.Adam(model_train.parameters(), Lr)
         lr_scheduler    = optim.lr_scheduler.StepLR(optimizer, step_size = 1, gamma = 0.96)
@@ -134,12 +140,6 @@ if __name__ == "__main__":
         gen_val         = DataLoader(val_dataset, batch_size=Batch_size, num_workers=4, pin_memory=True, 
                                 drop_last=True, collate_fn=dataset_collate)
 
-        epoch_step          = num_train // Batch_size
-        epoch_step_val      = num_val // Batch_size
-
-        if epoch_step == 0 or epoch_step_val == 0:
-            raise ValueError('数据集过小，无法进行训练，请扩充数据集。')
-
         for epoch in range(Init_epoch, Freeze_epoch):
             fit_one_epoch(model_train, model, loss, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, Freeze_epoch, Cuda)
             lr_scheduler.step()
@@ -150,6 +150,12 @@ if __name__ == "__main__":
         Freeze_epoch    = 50
         Unfreeze_epoch  = 100
 
+        epoch_step          = num_train // Batch_size
+        epoch_step_val      = num_val // Batch_size
+
+        if epoch_step == 0 or epoch_step_val == 0:
+            raise ValueError('数据集过小，无法进行训练，请扩充数据集。')
+
         optimizer       = optim.Adam(model_train.parameters(), Lr)
         lr_scheduler    = optim.lr_scheduler.StepLR(optimizer, step_size = 1, gamma = 0.96)
 
@@ -159,12 +165,6 @@ if __name__ == "__main__":
                                 drop_last=True, collate_fn=dataset_collate)
         gen_val         = DataLoader(val_dataset, batch_size=Batch_size, num_workers=4, pin_memory=True, 
                                 drop_last=True, collate_fn=dataset_collate)
-
-        epoch_step          = num_train // Batch_size
-        epoch_step_val      = num_val // Batch_size
-
-        if epoch_step == 0 or epoch_step_val == 0:
-            raise ValueError('数据集过小，无法进行训练，请扩充数据集。')
 
         for epoch in range(Freeze_epoch, Unfreeze_epoch):
             fit_one_epoch(model_train, model, loss, optimizer, epoch, epoch_step, epoch_step_val, gen, gen_val, Unfreeze_epoch, Cuda)
