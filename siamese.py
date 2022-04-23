@@ -5,6 +5,7 @@ import torch.backends.cudnn as cudnn
 from PIL import Image
 
 from nets.siamese import Siamese as siamese
+from utils.utils import letterbox_image, preprocess_input
 
 
 #---------------------------------------------------#
@@ -16,16 +17,21 @@ class Siamese(object):
         #   使用自己训练好的模型进行预测一定要修改model_path
         #   model_path指向logs文件夹下的权值文件
         #-----------------------------------------------------#
-        "model_path"    : 'model_data/Omniglot_vgg.pth',
+        "model_path"        : 'model_data/Omniglot_vgg.pth',
         #-----------------------------------------------------#
         #   输入图片的大小。
         #-----------------------------------------------------#
-        "input_shape"   : (105, 105, 3),
+        "input_shape"       : [105, 105],
+        #--------------------------------------------------------------------#
+        #   该变量用于控制是否使用letterbox_image对输入图像进行不失真的resize
+        #   否则对图像进行CenterCrop
+        #--------------------------------------------------------------------#
+        "letterbox_image"   : False,
         #-------------------------------#
         #   是否使用Cuda
         #   没有GPU可以设置成False
         #-------------------------------#
-        "cuda"          : True
+        "cuda"              : True
     }
 
     @classmethod
@@ -83,18 +89,14 @@ class Siamese(object):
         #---------------------------------------------------#
         #   对输入图像进行不失真的resize
         #---------------------------------------------------#
-        image_1 = self.letterbox_image(image_1,[self.input_shape[1],self.input_shape[0]])
-        image_2 = self.letterbox_image(image_2,[self.input_shape[1],self.input_shape[0]])
+        image_1 = letterbox_image(image_1, [self.input_shape[1], self.input_shape[0]], self.letterbox_image)
+        image_2 = letterbox_image(image_2, [self.input_shape[1], self.input_shape[0]], self.letterbox_image)
         
-        #---------------------------------------------------#
-        #   对输入图像进行归一化
-        #---------------------------------------------------#
-        photo_1 = np.asarray(image_1).astype(np.float64) / 255
-        photo_2 = np.asarray(image_2).astype(np.float64) / 255
-
-        if self.input_shape[-1]==1:
-            photo_1 = np.expand_dims(photo_1, -1)
-            photo_2 = np.expand_dims(photo_2, -1)
+        #---------------------------------------------------------#
+        #   归一化+添加上batch_size维度
+        #---------------------------------------------------------#
+        photo_1  = preprocess_input(np.array(image_1, np.float32))
+        photo_2  = preprocess_input(np.array(image_2, np.float32))
 
         with torch.no_grad():
             #---------------------------------------------------#

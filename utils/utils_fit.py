@@ -1,84 +1,101 @@
+import os
+
 import torch
 import torch.nn as nn
 from tqdm import tqdm
 
+from .utils import get_lr
 
-def get_lr(optimizer):
-    for param_group in optimizer.param_groups:
-        return param_group['lr']
 
-def fit_one_epoch(model_train, model, loss, optimizer, epoch, epoch_step, epoch_step_val, gen, genval, Epoch, cuda):
+def fit_one_epoch(model_train, model, loss, loss_history, optimizer, epoch, epoch_step, epoch_step_val, gen, genval, Epoch, cuda, fp16, scaler, save_period, save_dir, local_rank=0):
     total_loss      = 0
     total_accuracy  = 0
 
     val_loss            = 0
     val_total_accuracy  = 0
     
+    if local_rank == 0:
+        print('Start Train')
+        pbar = tqdm(total=epoch_step,desc=f'Epoch {epoch + 1}/{Epoch}',postfix=dict,mininterval=0.3)
     model_train.train()
-    print('Start Train')
-    with tqdm(total=epoch_step,desc=f'Epoch {epoch + 1}/{Epoch}',postfix=dict,mininterval=0.3) as pbar:
-        for iteration, batch in enumerate(gen):
-            if iteration >= epoch_step:
-                break
-            images, targets = batch[0], batch[1]
-            with torch.no_grad():
-                if cuda:
-                    images  = torch.from_numpy(images).type(torch.FloatTensor).cuda()
-                    targets = torch.from_numpy(targets).type(torch.FloatTensor).cuda()
-                else:
-                    images  = torch.from_numpy(images).type(torch.FloatTensor)
-                    targets = torch.from_numpy(targets).type(torch.FloatTensor)
+    for iteration, batch in enumerate(gen):
+        if iteration >= epoch_step:
+            break
+        images, targets = batch[0], batch[1]
+        with torch.no_grad():
+            if cuda:
+                images  = images.cuda(local_rank)
+                targets = targets.cuda(local_rank)
 
-            optimizer.zero_grad()
+        #----------------------#
+        #   清零梯度
+        #----------------------#
+        optimizer.zero_grad()
+        if not fp16:
             outputs = nn.Sigmoid()(model_train(images))
             output  = loss(outputs, targets)
 
             output.backward()
             optimizer.step()
+        else:
+            from torch.cuda.amp import autocast
+            with autocast():
+                outputs = nn.Sigmoid()(model_train(images))
+                output  = loss(outputs, targets)
+            #----------------------#
+            #   反向传播
+            #----------------------#
+            scaler.scale(output).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
-            with torch.no_grad():
-                equal       = torch.eq(torch.round(outputs), targets)
-                accuracy    = torch.mean(equal.float())
+        with torch.no_grad():
+            equal       = torch.eq(torch.round(outputs), targets)
+            accuracy    = torch.mean(equal.float())
 
-            total_loss      += output.item()
-            total_accuracy  += accuracy.item()
+        total_loss      += output.item()
+        total_accuracy  += accuracy.item()
 
+        if local_rank == 0:
             pbar.set_postfix(**{'total_loss': total_loss / (iteration + 1), 
                                 'acc'       : total_accuracy / (iteration + 1),
                                 'lr'        : get_lr(optimizer)})
             pbar.update(1)
-    print('Finish Train')
-
+    if local_rank == 0:
+        pbar.close()
+        print('Finish Train')
+        print('Start Validation')
+        pbar = tqdm(total=epoch_step_val, desc=f'Epoch {epoch + 1}/{Epoch}',postfix=dict,mininterval=0.3)
     model_train.eval()
-    print('Start Validation')
-    with tqdm(total=epoch_step_val, desc=f'Epoch {epoch + 1}/{Epoch}',postfix=dict,mininterval=0.3) as pbar:
-        for iteration, batch in enumerate(genval):
-            if iteration >= epoch_step_val:
-                break
-            images_val, targets_val = batch[0], batch[1]
+    for iteration, batch in enumerate(genval):
+        if iteration >= epoch_step_val:
+            break
+        images_val, targets_val = batch[0], batch[1]
 
-            with torch.no_grad():
-                if cuda:
-                    images_val  = torch.from_numpy(images_val).type(torch.FloatTensor).cuda()
-                    targets_val = torch.from_numpy(targets_val).type(torch.FloatTensor).cuda()
-                else:
-                    images_val  = torch.from_numpy(images_val).type(torch.FloatTensor)
-                    targets_val = torch.from_numpy(targets_val).type(torch.FloatTensor)
-                optimizer.zero_grad()
-                outputs = nn.Sigmoid()(model_train(images_val))
-                output  = loss(outputs, targets_val)
+        with torch.no_grad():
+            if cuda:
+                images_val = images_val.cuda(local_rank)
+                targets_val  = targets_val.cuda(local_rank)
+                
+            optimizer.zero_grad()
+            outputs = nn.Sigmoid()(model_train(images_val))
+            output  = loss(outputs, targets_val)
 
-                equal       = torch.eq(torch.round(outputs), targets_val)
-                accuracy    = torch.mean(equal.float())
+            equal       = torch.eq(torch.round(outputs), targets_val)
+            accuracy    = torch.mean(equal.float())
 
-            val_loss            += output.item()
-            val_total_accuracy  += accuracy.item()
+        val_loss            += output.item()
+        val_total_accuracy  += accuracy.item()
 
-            pbar.set_postfix(**{'val_loss'  : val_loss / (iteration + 1), 
-                                'acc'       : val_total_accuracy / (iteration + 1)})
-            pbar.update(1)
+        pbar.set_postfix(**{'val_loss'  : val_loss / (iteration + 1), 
+                            'acc'       : val_total_accuracy / (iteration + 1)})
+        pbar.update(1)
             
-    print('Finish Validation')
-    print('Epoch:'+ str(epoch+1) + '/' + str(Epoch))
-    print('Total Loss: %.3f || Val Loss: %.3f ' % (total_loss / epoch_step, val_loss / epoch_step_val))
-    torch.save(model.state_dict(), 'logs/ep%03d-loss%.3f-val_loss%.3f.pth'%((epoch + 1), total_loss / epoch_step, val_loss / epoch_step_val))
+    if local_rank == 0:
+        pbar.close()
+        print('Finish Validation')
+        loss_history.append_loss(epoch + 1, total_loss / epoch_step, val_loss / epoch_step_val)
+        print('Epoch:'+ str(epoch+1) + '/' + str(Epoch))
+        print('Total Loss: %.3f || Val Loss: %.3f ' % (total_loss / epoch_step, val_loss / epoch_step_val))
+        if (epoch + 1) % save_period == 0 or epoch + 1 == Epoch:
+            torch.save(model.state_dict(), os.path.join(save_dir, "ep%03d-loss%.3f-val_loss%.3f.pth" % (epoch + 1, total_loss / epoch_step, val_loss / epoch_step_val)))

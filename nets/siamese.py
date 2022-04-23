@@ -18,7 +18,7 @@ def get_img_output_length(width, height):
 class Siamese(nn.Module):
     def __init__(self, input_shape, pretrained=False):
         super(Siamese, self).__init__()
-        self.vgg = VGG16(pretrained, input_shape[-1])
+        self.vgg = VGG16(pretrained, 3)
         del self.vgg.avgpool
         del self.vgg.classifier
         
@@ -34,7 +34,7 @@ class Siamese(nn.Module):
         x1 = self.vgg.features(x1)
         x2 = self.vgg.features(x2)   
         #-------------------------#
-        #   相减取绝对值
+        #   相减取绝对值，取l1距离
         #-------------------------#     
         x1 = torch.flatten(x1, 1)
         x2 = torch.flatten(x2, 1)
