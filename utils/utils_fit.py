@@ -32,7 +32,7 @@ def fit_one_epoch(model_train, model, loss, loss_history, optimizer, epoch, epoc
         #----------------------#
         optimizer.zero_grad()
         if not fp16:
-            outputs = nn.Sigmoid()(model_train(images))
+            outputs = model_train(images)
             output  = loss(outputs, targets)
 
             output.backward()
@@ -40,7 +40,7 @@ def fit_one_epoch(model_train, model, loss, loss_history, optimizer, epoch, epoc
         else:
             from torch.cuda.amp import autocast
             with autocast():
-                outputs = nn.Sigmoid()(model_train(images))
+                outputs = model_train(images)
                 output  = loss(outputs, targets)
             #----------------------#
             #   反向传播
@@ -50,7 +50,7 @@ def fit_one_epoch(model_train, model, loss, loss_history, optimizer, epoch, epoc
             scaler.update()
 
         with torch.no_grad():
-            equal       = torch.eq(torch.round(outputs), targets)
+            equal       = torch.eq(torch.round(nn.Sigmoid()(outputs)), targets)
             accuracy    = torch.mean(equal.float())
 
         total_loss      += output.item()
@@ -70,18 +70,18 @@ def fit_one_epoch(model_train, model, loss, loss_history, optimizer, epoch, epoc
     for iteration, batch in enumerate(genval):
         if iteration >= epoch_step_val:
             break
-        images_val, targets_val = batch[0], batch[1]
-
+        
+        images, targets = batch[0], batch[1]
         with torch.no_grad():
             if cuda:
-                images_val = images_val.cuda(local_rank)
-                targets_val  = targets_val.cuda(local_rank)
+                images  = images.cuda(local_rank)
+                targets = targets.cuda(local_rank)
                 
             optimizer.zero_grad()
-            outputs = nn.Sigmoid()(model_train(images_val))
-            output  = loss(outputs, targets_val)
+            outputs = model_train(images)
+            output  = loss(outputs, targets)
 
-            equal       = torch.eq(torch.round(outputs), targets_val)
+            equal       = torch.eq(torch.round(nn.Sigmoid()(outputs)), targets)
             accuracy    = torch.mean(equal.float())
 
         val_loss            += output.item()

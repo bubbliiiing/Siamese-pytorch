@@ -5,7 +5,7 @@ import torch.backends.cudnn as cudnn
 from PIL import Image
 
 from nets.siamese import Siamese as siamese
-from utils.utils import letterbox_image, preprocess_input
+from utils.utils import letterbox_image, preprocess_input, cvtColor
 
 
 #---------------------------------------------------#
@@ -86,6 +86,12 @@ class Siamese(object):
     #   检测图片
     #---------------------------------------------------#
     def detect_image(self, image_1, image_2):
+        #---------------------------------------------------------#
+        #   在这里将图像转换成RGB图像，防止灰度图在预测时报错。
+        #---------------------------------------------------------#
+        image_1 = cvtColor(image_1)
+        image_2 = cvtColor(image_2)
+        
         #---------------------------------------------------#
         #   对输入图像进行不失真的resize
         #---------------------------------------------------#

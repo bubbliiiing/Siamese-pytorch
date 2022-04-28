@@ -228,7 +228,7 @@ if __name__ == "__main__":
             cudnn.benchmark = True
             model_train = model_train.cuda()
 
-    loss = nn.BCELoss()
+    loss = nn.BCEWithLogitsLoss()
     #----------------------------------------------------#
     #   训练集和验证集的比例。
     #----------------------------------------------------#
