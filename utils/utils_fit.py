@@ -87,10 +87,11 @@ def fit_one_epoch(model_train, model, loss, loss_history, optimizer, epoch, epoc
         val_loss            += output.item()
         val_total_accuracy  += accuracy.item()
 
-        pbar.set_postfix(**{'val_loss'  : val_loss / (iteration + 1), 
-                            'acc'       : val_total_accuracy / (iteration + 1)})
-        pbar.update(1)
-            
+        if local_rank == 0:
+            pbar.set_postfix(**{'val_loss'  : val_loss / (iteration + 1), 
+                                'acc'       : val_total_accuracy / (iteration + 1)})
+            pbar.update(1)
+                
     if local_rank == 0:
         pbar.close()
         print('Finish Validation')
