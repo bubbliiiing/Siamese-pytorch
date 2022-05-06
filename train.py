@@ -12,7 +12,7 @@ from nets.siamese import Siamese
 from utils.callbacks import LossHistory
 from utils.dataloader import SiameseDataset, dataset_collate
 from utils.utils import (download_weights, get_lr_scheduler, load_dataset,
-                         set_optimizer_lr)
+                         set_optimizer_lr, show_config)
 from utils.utils_fit import fit_one_epoch
 
 if __name__ == "__main__":
@@ -139,9 +139,9 @@ if __name__ == "__main__":
     #------------------------------------------------------------------#
     lr_decay_type       = 'cos'
     #------------------------------------------------------------------#
-    #   save_period     多少个epoch保存一次权值，默认每个世代都保存
+    #   save_period     多少个epoch保存一次权值
     #------------------------------------------------------------------#
-    save_period         = 1
+    save_period         = 10
     #------------------------------------------------------------------#
     #   save_dir        权值与日志文件保存的文件夹
     #------------------------------------------------------------------#
@@ -149,10 +149,9 @@ if __name__ == "__main__":
     #------------------------------------------------------------------#
     #   num_workers     用于设置是否使用多线程读取数据，1代表关闭多线程
     #                   开启后会加快数据读取速度，但是会占用更多内存
-    #                   keras里开启多线程有些时候速度反而慢了许多
     #                   在IO为瓶颈的时候再开启多线程，即GPU运算速度远大于读取图片的速度。
     #------------------------------------------------------------------#
-    num_workers         = 1
+    num_workers         = 4
 
     #------------------------------------------------------#
     #   设置用到的显卡
@@ -181,27 +180,51 @@ if __name__ == "__main__":
 
     model = Siamese(input_shape, pretrained)
     if model_path != '':
+        #------------------------------------------------------#
+        #   权值文件请看README，百度网盘下载
+        #------------------------------------------------------#
         if local_rank == 0:
-            #------------------------------------------------------#
-            #   载入预训练权重
-            #------------------------------------------------------#
-            print('Loading weights into state dict...')
-        model_dict = model.state_dict()
-        pretrained_dict = torch.load(model_path, map_location=device)
-        pretrained_dict = {k: v for k, v in pretrained_dict.items() if np.shape(model_dict[k]) ==  np.shape(v)}
-        model_dict.update(pretrained_dict)
+            print('Load weights {}.'.format(model_path))
+        
+        #------------------------------------------------------#
+        #   根据预训练权重的Key和模型的Key进行加载
+        #------------------------------------------------------#
+        model_dict      = model.state_dict()
+        pretrained_dict = torch.load(model_path, map_location = device)
+        load_key, no_load_key, temp_dict = [], [], {}
+        for k, v in pretrained_dict.items():
+            if k in model_dict.keys() and np.shape(model_dict[k]) == np.shape(v):
+                temp_dict[k] = v
+                load_key.append(k)
+            else:
+                no_load_key.append(k)
+        model_dict.update(temp_dict)
         model.load_state_dict(model_dict)
+        #------------------------------------------------------#
+        #   显示没有匹配上的Key
+        #------------------------------------------------------#
+        if local_rank == 0:
+            print("\nSuccessful Load Key:", str(load_key)[:500], "……\nSuccessful Load Key Num:", len(load_key))
+            print("\nFail To Load Key:", str(no_load_key)[:500], "……\nFail To Load Key num:", len(no_load_key))
+            print("\n\033[1;33;44m温馨提示，head部分没有载入是正常现象，Backbone部分没有载入是错误的。\033[0m")
     
+    #----------------------#
+    #   获得损失函数
+    #----------------------#
+    loss = nn.BCEWithLogitsLoss()
+    #----------------------#
+    #   记录Loss
+    #----------------------#
     if local_rank == 0:
         loss_history = LossHistory(save_dir, model, input_shape=input_shape)
     else:
         loss_history = None
         
+    #------------------------------------------------------------------#
+    #   torch 1.2不支持amp，建议使用torch 1.7.1及以上正确使用fp16
+    #   因此torch1.2这里显示"could not be resolve"
+    #------------------------------------------------------------------#
     if fp16:
-        #------------------------------------------------------------------#
-        #   torch 1.2不支持amp，建议使用torch 1.7.1及以上正确使用fp16
-        #   因此torch1.2这里显示"could not be resolve"
-        #------------------------------------------------------------------#
         from torch.cuda.amp import GradScaler as GradScaler
         scaler = GradScaler()
     else:
@@ -228,7 +251,6 @@ if __name__ == "__main__":
             cudnn.benchmark = True
             model_train = model_train.cuda()
 
-    loss = nn.BCEWithLogitsLoss()
     #----------------------------------------------------#
     #   训练集和验证集的比例。
     #----------------------------------------------------#
@@ -236,7 +258,28 @@ if __name__ == "__main__":
     train_lines, train_labels, val_lines, val_labels = load_dataset(dataset_path, train_own_data, train_ratio)
     num_train   = len(train_lines)
     num_val     = len(val_lines)
-    
+
+    if local_rank == 0:
+        show_config(
+            model_path = model_path, input_shape = input_shape, \
+            Init_Epoch = Init_Epoch, Epoch = Epoch, batch_size = batch_size, \
+            Init_lr = Init_lr, Min_lr = Min_lr, optimizer_type = optimizer_type, momentum = momentum, lr_decay_type = lr_decay_type, \
+            save_period = save_period, save_dir = save_dir, num_workers = num_workers, num_train = num_train, num_val = num_val
+        )
+        #---------------------------------------------------------#
+        #   总训练世代指的是遍历全部数据的总次数
+        #   总训练步长指的是梯度下降的总次数 
+        #   每个训练世代包含若干训练步长，每个训练步长进行一次梯度下降。
+        #   此处仅建议最低训练世代，上不封顶，计算时只考虑了解冻部分
+        #----------------------------------------------------------#
+        wanted_step = 3e4 if optimizer_type == "sgd" else 1e4
+        total_step  = num_train // batch_size * Epoch
+        if total_step <= wanted_step:
+            wanted_epoch = wanted_step // (num_train // batch_size) + 1
+            print("\n\033[1;33;44m[Warning] 使用%s优化器时，建议将训练总步长设置到%d以上。\033[0m"%(optimizer_type, wanted_step))
+            print("\033[1;33;44m[Warning] 本次运行的总训练数据量为%d，batch_size为%d，共训练%d个Epoch，计算出总训练步长为%d。\033[0m"%(num_train, batch_size, Epoch, total_step))
+            print("\033[1;33;44m[Warning] 由于总训练步长为%d，小于建议总步长%d，建议设置总世代为%d。\033[0m"%(total_step, wanted_step, wanted_epoch))
+
     #-------------------------------------------------------------#
     #   训练分为两个阶段，两阶段初始的学习率不同，手动调节了学习率
     #   显存不足与数据集大小无关，提示显存不足请调小batch_size。
@@ -245,7 +288,7 @@ if __name__ == "__main__":
         #-------------------------------------------------------------------#
         #   判断当前batch_size，自适应调整学习率
         #-------------------------------------------------------------------#
-        nbs             = 32
+        nbs             = 64
         lr_limit_max    = 1e-3 if optimizer_type == 'adam' else 1e-1
         lr_limit_min    = 3e-4 if optimizer_type == 'adam' else 5e-4
         Init_lr_fit     = min(max(batch_size / nbs * Init_lr, lr_limit_min), lr_limit_max)
